@@ -82,6 +82,11 @@ if "messages" not in st.session_state: st.session_state.messages = []
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]): st.markdown(msg["content"], unsafe_allow_html=True)
 
+# IME composition fix (macOS only) - prevents Enter from submitting during CJK input
+if os.name != 'nt':
+    import streamlit.components.v1 as components
+    components.html('<script>!function(){if(window.parent.__imeFix)return;window.parent.__imeFix=1;var d=window.parent.document,c=0;d.addEventListener("compositionstart",()=>c=1,!0);d.addEventListener("compositionend",()=>c=0,!0);function f(){d.querySelectorAll("textarea[data-testid=stChatInputTextArea]").forEach(t=>{t.__imeFix||(t.__imeFix=1,t.addEventListener("keydown",e=>{e.key==="Enter"&&!e.shiftKey&&(e.isComposing||c||e.keyCode===229)&&(e.stopImmediatePropagation(),e.preventDefault())},!0))})}f();new MutationObserver(f).observe(d.body,{childList:1,subtree:1})}()</script>', height=0)
+
 if prompt := st.chat_input("请输入指令"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"): st.markdown(prompt, unsafe_allow_html=False)  # 小心 XSS
