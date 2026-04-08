@@ -824,7 +824,7 @@ def execute_js_rich(script, driver, no_monitor=False):
     try:
         print(f"Executing: {script[:250]} ...")
         response = driver.execute_js(script)
-        result = response.get('data') or response.get('result')
+        result = response['data'] if 'data' in response else response.get('result')
         if response.get('closed', 0) == 1: reloaded = True
         time.sleep(1) 
     except Exception as e:
@@ -835,10 +835,10 @@ def execute_js_rich(script, driver, no_monitor=False):
     rr = {
         "status": "failed" if error_msg else "success",
         "js_return": result,
-        "environment": {"reloaded": reloaded},
         "tab_id": driver.default_session_id
     }  
-    if response.get('newTabs'): rr['environment']['newTabs'] = response['newTabs']
+    if reloaded: rr['reloaded'] = reloaded
+    if response.get('newTabs'): rr['newTabs'] = response['newTabs']
     else:
         after = driver.get_session_dict()
         new_sids = {k: v for k, v in after.items() if k not in before_sids}

@@ -23,8 +23,7 @@ class BaseHandler:
             ret = yield from try_call_generator(getattr(self, method_name), args, response)
             _ = yield from try_call_generator(self.tool_after_callback, tool_name, args, response, ret)
             return ret
-        elif tool_name == 'bad_json':
-            return StepOutcome(None, next_prompt=args.get('msg', 'bad_json'), should_exit=False)
+        elif tool_name == 'bad_json': return StepOutcome(None, next_prompt=args.get('msg', 'bad_json'), should_exit=False)
         else:
             yield f"未知工具: {tool_name}\n"
             return StepOutcome(None, next_prompt=f"未知工具 {tool_name}", should_exit=False)
@@ -42,9 +41,6 @@ def get_pretty_json(data):
     if isinstance(data, dict) and "script" in data:
         data = data.copy(); data["script"] = data["script"].replace("; ", ";\n  ")
     return json.dumps(data, indent=2, ensure_ascii=False).replace('\\n', '\n')
-
-_TOOL_ICONS = {'file_read': '📖', 'file_write': '✏️', 'file_patch': '✏️', 'code_run': '⚙️',
-    'web_scan': '🌐', 'web_execute_js': '🌐', 'update_working_checkpoint': '💾', 'ask_user': '❓', 'start_long_term_update': '💾'}
 
 def agent_runner_loop(client, system_prompt, user_input, handler, tools_schema, max_turns=40, verbose=True, initial_user_content=None):
     messages = [
@@ -72,11 +68,10 @@ def agent_runner_loop(client, system_prompt, user_input, handler, tools_schema, 
         tool_results = []; next_prompts = set(); should_exit = None
         for ii, tc in enumerate(tool_calls):
             tool_name, args, tid = tc['tool_name'], tc['args'], tc.get('id', '')
-            icon = _TOOL_ICONS.get(tool_name, '🛠️')
             if tool_name == 'no_tool': pass
             else: 
-                if verbose: yield f"{icon} 正在调用工具: `{tool_name}`  📥参数:\n````text\n{get_pretty_json(args)}\n````\n"
-                else: yield f"{icon} {tool_name}({_compact_tool_args(tool_name, args)})\n\n\n"
+                if verbose: yield f"🛠️ 正在调用工具: `{tool_name}`  📥参数:\n````text\n{get_pretty_json(args)}\n````\n"
+                else: yield f"🛠️ {tool_name}({_compact_tool_args(tool_name, args)})\n\n\n"
             handler.current_turn = turn
             gen = handler.dispatch(tool_name, args, response, index=ii)
             try:
