@@ -24,11 +24,60 @@ if _lf:
         try:
             if label == 'Prompt':
                 _tls.gen = _lf.start_observation(name='llm.chat', as_type='generation', input=content[:20000])
+                _tls.usage = None
             elif label == 'Response' and getattr(_tls, 'gen', None) is not None:
-                _tls.gen.update(output=content[:20000]); _tls.gen.end(); _tls.gen = None
+                _tls.gen.update(output=content[:20000], usage_details=getattr(_tls, 'usage', None))
+                _tls.gen.end(); _tls.gen = None
         except Exception: pass
         return _orig_log(label, content)
     llmcore._write_llm_log = _patched_log
+
+    def _extract_usage(buf):
+        u = {}
+        import json as _j
+        for line in buf:
+            s = line.decode('utf-8', 'replace') if isinstance(line, (bytes, bytearray)) else line
+            if not s or not s.startswith('data:'): continue
+            ds = s[5:].lstrip()
+            if ds == '[DONE]': continue
+            try: evt = _j.loads(ds)
+            except: continue
+            if evt.get('type') == 'message_start':
+                us = evt.get('message', {}).get('usage', {}) or {}
+                u['input'] = us.get('input_tokens', u.get('input', 0))
+                if us.get('cache_creation_input_tokens'): u['cache_creation_input_tokens'] = us['cache_creation_input_tokens']
+                if us.get('cache_read_input_tokens'): u['cache_read_input_tokens'] = us['cache_read_input_tokens']
+            elif evt.get('type') == 'message_delta':
+                ot = (evt.get('usage') or {}).get('output_tokens')
+                if ot: u['output'] = ot
+            elif evt.get('type') == 'response.completed':
+                us = evt.get('response', {}).get('usage', {}) or {}
+                if us.get('input_tokens'): u['input'] = us['input_tokens']
+                if us.get('output_tokens'): u['output'] = us['output_tokens']
+                cr = (us.get('input_tokens_details') or {}).get('cached_tokens')
+                if cr: u['cache_read_input_tokens'] = cr
+            else:
+                us = evt.get('usage')
+                if us:
+                    if us.get('prompt_tokens'): u['input'] = us['prompt_tokens']
+                    if us.get('completion_tokens'): u['output'] = us['completion_tokens']
+                    cr = (us.get('prompt_tokens_details') or {}).get('cached_tokens')
+                    if cr: u['cache_read_input_tokens'] = cr
+        return u or None
+
+    def _wrap_parser(orig):
+        def wrapped(resp_lines, *a, **kw):
+            buf = []
+            def tee():
+                for ln in resp_lines:
+                    buf.append(ln); yield ln
+            ret = yield from orig(tee(), *a, **kw)
+            try: _tls.usage = _extract_usage(buf)
+            except Exception: pass
+            return ret
+        return wrapped
+    llmcore._parse_claude_sse = _wrap_parser(llmcore._parse_claude_sse)
+    llmcore._parse_openai_sse = _wrap_parser(llmcore._parse_openai_sse)
 
     _orig_before = agent_loop.BaseHandler.tool_before_callback
     _orig_after = agent_loop.BaseHandler.tool_after_callback
